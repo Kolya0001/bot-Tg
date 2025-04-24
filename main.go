@@ -261,3 +261,51 @@ func sendMessage(chatID int64, text string) {
 		logger.Printf("Ошибка отправки сообщения: %v", err)
 	}
 }
+
+// Закомментированные части, которые раньше касались базы данных:
+/*
+func connectDB() (*sql.DB, error) {
+	db, err := sql.Open("postgres", "your_connection_string")
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func getUserProgressFromDB(userID int64) (map[int]bool, error) {
+	db, err := connectDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SELECT task_id, solved FROM user_progress WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	progress := make(map[int]bool)
+	for rows.Next() {
+		var taskID int
+		var solved bool
+		if err := rows.Scan(&taskID, &solved); err != nil {
+			return nil, err
+		}
+		progress[taskID] = solved
+	}
+
+	return progress, nil
+}
+
+func saveUserProgressToDB(userID int64, taskID int, solved bool) error {
+	db, err := connectDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec("INSERT INTO user_progress (user_id, task_id, solved) VALUES ($1, $2, $3) ON CONFLICT (user_id, task_id) DO UPDATE SET solved = $3", userID, taskID, solved)
+	return err
+}
+*/
