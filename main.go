@@ -1,36 +1,25 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 )
 
 var (
-	db            *sql.DB
-	bot           *tgbotapi.BotAPI
-	logger        = log.New(os.Stdout, "BOT: ", log.LstdFlags|log.Lshortfile)
+	bot    *tgbotapi.BotAPI
+	logger = log.New(os.Stdout, "BOT: ", log.LstdFlags|log.Lshortfile)
+	// Используем sync.Map для хранения прогресса
 	progressCache sync.Map
 )
 
 type Config struct {
-	DB struct {
-		Host     string
-		Port     string
-		Name     string
-		User     string
-		Password string
-	}
 	BotToken string
 }
 
@@ -48,12 +37,6 @@ func main() {
 		logger.Fatal("Ошибка загрузки конфигурации:", err)
 	}
 
-	// Подключение к БД
-	if err = initDB(cfg); err != nil {
-		logger.Fatal("Ошибка инициализации БД:", err)
-	}
-	defer db.Close()
-
 	// Инициализация бота
 	if bot, err = tgbotapi.NewBotAPI(cfg.BotToken); err != nil {
 		logger.Panic("Ошибка инициализации бота:", err)
@@ -70,49 +53,9 @@ func loadConfig() (*Config, error) {
 	}
 
 	var cfg Config
-	cfg.DB.Host = os.Getenv("DB_HOST")
-	cfg.DB.Port = os.Getenv("DB_PORT")
-	cfg.DB.Name = os.Getenv("DB_NAME")
-	cfg.DB.User = os.Getenv("DB_USER")
-	cfg.DB.Password = os.Getenv("DB_PASSWORD")
-	cfg.BotToken = "7949936274:AAFsZMMLnb-SwGJiQUDXAa0aVd8zNWIzyOA"
+	cfg.BotToken = "7949936274:AAFsZMMLnb-SwGJiQUDXAa0aVd8zNWIzyOA" // Токен бота
 
 	return &cfg, nil
-}
-
-func initDB(cfg *Config) error {
-	connStr := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name,
-	)
-
-	var err error
-	db, err = sql.Open("postgres", connStr)
-	if err != nil {
-		return fmt.Errorf("ошибка подключения к БД: %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err = db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ошибка проверки соединения: %v", err)
-	}
-
-	// Создание таблиц
-	if _, err = db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS user_progress (
-			user_id BIGINT,
-			task_id INTEGER,
-			solved BOOLEAN,
-			PRIMARY KEY (user_id, task_id)
-		);
-	`); err != nil {
-		return fmt.Errorf("ошибка создания таблицы: %v", err)
-	}
-
-	logger.Println("База данных успешно инициализирована")
-	return nil
 }
 
 func processUpdates(updateConfig tgbotapi.UpdateConfig) {
@@ -290,46 +233,26 @@ func getUserProgress(userID int64) (map[int]bool, error) {
 		return cached.(map[int]bool), nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	rows, err := db.QueryContext(ctx,
-		"SELECT task_id, solved FROM user_progress WHERE user_id = $1", userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+	// Если нет кэша, создаем новый
 	progress := make(map[int]bool)
-	for rows.Next() {
-		var taskID int
-		var solved bool
-		if err := rows.Scan(&taskID, &solved); err != nil {
-			return nil, err
-		}
-		progress[taskID] = solved
-	}
 
-	// Обновление кэша
+	// Сохраняем прогресс в кэш
 	progressCache.Store(userID, progress)
+
 	return progress, nil
 }
 
 func saveUserProgress(userID int64, taskID int, solved bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	// Извлекаем текущий прогресс из кэша
+	progress, _ := getUserProgress(userID)
 
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO user_progress (user_id, task_id, solved)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id, task_id)
-		DO UPDATE SET solved = $3`,
-		userID, taskID, solved,
-	)
+	// Обновляем прогресс
+	progress[taskID] = solved
 
-	// Сброс кэша при обновлении
-	progressCache.Delete(userID)
-	return err
+	// Сохраняем обновленный прогресс в кэш
+	progressCache.Store(userID, progress)
+
+	return nil
 }
 
 func sendMessage(chatID int64, text string) {
