@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -43,7 +44,23 @@ func main() {
 	logger.Printf("Авторизован как %s", bot.Self.UserName)
 
 	// Запуск обработчика обновлений
-	processUpdates(tgbotapi.NewUpdate(0))
+	go processUpdates(tgbotapi.NewUpdate(0))
+
+	// Устанавливаем переменную окружения PORT, если она не установлена
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Значение по умолчанию
+	}
+
+	// Запускаем фоновый HTTP сервер, чтобы Render не ругался на отсутствие открытых портов
+	go func() {
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			logger.Printf("Ошибка при запуске HTTP сервера: %v", err)
+		}
+	}()
+
+	// Бот будет продолжать работать, не блокируя выполнение основной программы
+	select {} // Блокировка main, чтобы приложение не завершилось
 }
 
 func loadConfig() (*Config, error) {
@@ -260,51 +277,3 @@ func sendMessage(chatID int64, text string) {
 		logger.Printf("Ошибка отправки сообщения: %v", err)
 	}
 }
-
-// Закомментированные части, которые раньше касались базы данных:
-/*
-func connectDB() (*sql.DB, error) {
-	db, err := sql.Open("postgres", "your_connection_string")
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-func getUserProgressFromDB(userID int64) (map[int]bool, error) {
-	db, err := connectDB()
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	rows, err := db.Query("SELECT task_id, solved FROM user_progress WHERE user_id = $1", userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	progress := make(map[int]bool)
-	for rows.Next() {
-		var taskID int
-		var solved bool
-		if err := rows.Scan(&taskID, &solved); err != nil {
-			return nil, err
-		}
-		progress[taskID] = solved
-	}
-
-	return progress, nil
-}
-
-func saveUserProgressToDB(userID int64, taskID int, solved bool) error {
-	db, err := connectDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec("INSERT INTO user_progress (user_id, task_id, solved) VALUES ($1, $2, $3) ON CONFLICT (user_id, task_id) DO UPDATE SET solved = $3", userID, taskID, solved)
-	return err
-}
-*/
