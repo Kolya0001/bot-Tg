@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
 )
 
 var (
@@ -48,10 +47,6 @@ func main() {
 }
 
 func loadConfig() (*Config, error) {
-	if err := godotenv.Load(); err != nil {
-		return nil, fmt.Errorf("ошибка загрузки .env: %v", err)
-	}
-
 	var cfg Config
 	cfg.BotToken = os.Getenv("TELEGRAM_TOKEN") // Получаем токен из переменной окружения
 
