@@ -53,7 +53,11 @@ func loadConfig() (*Config, error) {
 	}
 
 	var cfg Config
-	cfg.BotToken = "7949936274:AAFsZMMLnb-SwGJiQUDXAa0aVd8zNWIzyOA" // Токен бота
+	cfg.BotToken = os.Getenv("TELEGRAM_TOKEN") // Получаем токен из переменной окружения
+
+	if cfg.BotToken == "" {
+		return nil, fmt.Errorf("TELEGRAM_TOKEN не установлен")
+	}
 
 	return &cfg, nil
 }
